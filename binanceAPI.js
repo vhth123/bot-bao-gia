@@ -1,19 +1,15 @@
 const axios = require('axios');
-const { HttpsProxyAgent } = require('https-proxy-agent');
 
-// Proxy configuration
-const PROXY_CONFIG = {
-  host: '143.14.173.142',
-  port: 22436,
+// Proxy configuration (set to false to disable proxy)
+const USE_PROXY = process.env.USE_PROXY !== 'false'; // Default to true
+const PROXY_CONFIG = USE_PROXY ? {
+  host: '89.106.0.16',
+  port: 11104,
   auth: {
-    username: 'muaproxy693f6f8818e56',
-    password: 'vlbnbbtx8wvdno6u'
+    username: 'muaproxy693f7352b9777',
+    password: 'kmyawni1fon1znpt'
   }
-};
-
-// Tạo proxy agent
-const proxyUrl = `http://${PROXY_CONFIG.auth.username}:${PROXY_CONFIG.auth.password}@${PROXY_CONFIG.host}:${PROXY_CONFIG.port}`;
-const proxyAgent = new HttpsProxyAgent(proxyUrl);
+} : false;
 
 // Danh sách các API endpoints thay thế (fallback)
 const BINANCE_API_ENDPOINTS = [
@@ -50,13 +46,23 @@ async function callBinanceAPI(path, maxRetries = 3) {
     for (let i = 0; i < BINANCE_API_ENDPOINTS.length; i++) {
       try {
         const endpoint = getApiEndpoint();
-        const response = await axios.get(`${endpoint}${path}`, {
+        const config = {
           timeout: 15000,
-          httpsAgent: proxyAgent,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
           }
-        });
+        };
+
+        // Add proxy if configured
+        if (PROXY_CONFIG) {
+          config.proxy = {
+            host: PROXY_CONFIG.host,
+            port: PROXY_CONFIG.port,
+            auth: PROXY_CONFIG.auth
+          };
+        }
+
+        const response = await axios.get(`${endpoint}${path}`, config);
         return response.data;
       } catch (error) {
         lastError = error;
