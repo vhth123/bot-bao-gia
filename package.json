@@ -1,0 +1,26 @@
+{
+  "name": "binance-funding-rate-alert",
+  "version": "1.0.0",
+  "description": "Bot báo cáo funding rate cao trên Binance Futures qua Telegram",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "binance",
+    "funding-rate",
+    "telegram",
+    "bot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "node-telegram-bot-api": "^0.64.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
