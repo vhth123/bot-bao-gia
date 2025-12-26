@@ -91,6 +91,16 @@ async function getAllFuturesPairs() {
 async function getAllFundingRates() {
   try {
     const data = await callBinanceAPI('/fapi/v1/premiumIndex');
+
+    // Debug: log the response type and content
+    console.log('📊 API Response type:', typeof data);
+    console.log('📊 Is array:', Array.isArray(data));
+
+    if (!Array.isArray(data)) {
+      console.error('❌ API did not return an array:', JSON.stringify(data).substring(0, 200));
+      return [];
+    }
+
     return data.map(item => ({
       symbol: item.symbol,
       fundingRate: parseFloat(item.lastFundingRate) * 100, // Convert to percentage
