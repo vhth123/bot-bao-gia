@@ -2,10 +2,10 @@ const axios = require('axios');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 
 // Proxy configuration
-const PROXY_HOST = '89.106.0.16';
-const PROXY_PORT = 11104;
-const PROXY_USER = 'muaproxy693f7352b9777';
-const PROXY_PASS = 'kmyawni1fon1znpt';
+const PROXY_HOST = '36.50.175.182';
+const PROXY_PORT = 26478;
+const PROXY_USER = 'muaproxy694e3e7aec20c';
+const PROXY_PASS = 'byi9e1qgiyolt00b';
 
 // Create proxy agent with explicit configuration
 const proxyUrl = `http://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}`;
@@ -55,6 +55,8 @@ async function callBinanceAPI(path, maxRetries = 3) {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
           }
         });
+
+        console.log(`✅ Success ${endpoint}${path} - Status: ${response.status}`);
         return response.data;
       } catch (error) {
         lastError = error;
