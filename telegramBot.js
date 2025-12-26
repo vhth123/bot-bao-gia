@@ -64,14 +64,16 @@ class TelegramNotifier {
 
   /**
    * Gửi thông báo về funding rate cao
-   * @param {Array} highRates - Array of {symbol, fundingRate, nextFundingTime, markPrice}
+   * @param {Array} highRates - Array of {symbol, fundingRate, nextFundingTime, markPrice, rateChange, hasChange, reason}
+   * @param {number} fundingThreshold - Ngưỡng funding rate tuyệt đối
+   * @param {number} changeThreshold - Ngưỡng thay đổi
    */
-  async sendFundingRateAlert(highRates) {
+  async sendFundingRateAlert(highRates, fundingThreshold, changeThreshold) {
     if (highRates.length === 0) {
       return;
     }
 
-    let message = '🚨 *CẢNH BÁO FUNDING RATE CAO* 🚨\n\n';
+    let message = '🚨 *CẢNH BÁO FUNDING RATE* 🚨\n\n';
 
     // Sắp xếp theo funding rate tuyệt đối (cao nhất trước)
     const sorted = highRates.sort((a, b) => Math.abs(b.fundingRate) - Math.abs(a.fundingRate));
@@ -82,15 +84,23 @@ class TelegramNotifier {
 
       message += `${index + 1}. ${emoji} *${item.symbol}*\n`;
       message += `   Funding Rate: *${sign}${item.fundingRate.toFixed(4)}%*\n`;
+
+      // Hiển thị thông tin thay đổi nếu có
+      if (item.hasChange && item.rateChange !== undefined) {
+        const changeSign = item.rateChange > 0 ? '+' : '';
+        const changeEmoji = item.rateChange > 0 ? '⬆️' : '⬇️';
+        message += `   ${changeEmoji} Thay đổi: *${changeSign}${item.rateChange.toFixed(4)}%*\n`;
+      }
+
       message += `   Mark Price: $${item.markPrice.toLocaleString()}\n`;
       message += `   Next Funding: ${this.formatTime(item.nextFundingTime)}\n\n`;
     });
 
-    message += `_Thời gian kiểm tra: ${new Date().toLocaleString('vi-VN')}_`;
+    message += `_Thời gian: ${new Date().toLocaleString('vi-VN')}_`;
 
     try {
       await this.bot.sendMessage(this.chatId, message, { parse_mode: 'Markdown' });
-      console.log(`✅ Đã gửi thông báo ${highRates.length} cặp có funding rate cao`);
+      console.log(`✅ Đã gửi thông báo ${highRates.length} cặp`);
     } catch (error) {
       console.error('❌ Lỗi khi gửi Telegram:', error.message);
     }

@@ -1,11 +1,12 @@
 require('dotenv').config();
-const { getHighFundingRates, searchSymbol } = require('./binanceAPI');
+const { getAllFundingRates, searchSymbol } = require('./binanceAPI');
 const TelegramNotifier = require('./telegramBot');
 
 // Load configuration từ .env
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const FUNDING_RATE_THRESHOLD = parseFloat(process.env.FUNDING_RATE_THRESHOLD) || 1.0;
+const CHANGE_THRESHOLD = parseFloat(process.env.CHANGE_THRESHOLD) || 0.2; // Ngưỡng thay đổi
 const CHECK_INTERVAL = parseInt(process.env.CHECK_INTERVAL) || 300000; // Default 5 phút
 
 // Kiểm tra cấu hình
@@ -20,6 +21,9 @@ const notifier = new TelegramNotifier(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
 // Set để lưu các symbol đã thông báo (để tránh spam)
 const notifiedSymbols = new Set();
 
+// Map để lưu funding rate lần quét trước {symbol: fundingRate}
+const previousRates = new Map();
+
 /**
  * Kiểm tra funding rate và gửi thông báo
  */
@@ -27,44 +31,78 @@ async function checkAndNotify() {
   console.log(`🔍 Kiểm tra funding rate lúc ${new Date().toLocaleString('vi-VN')}...`);
 
   try {
-    const highRates = await getHighFundingRates(FUNDING_RATE_THRESHOLD);
+    const allRates = await getAllFundingRates();
 
-    if (highRates.length > 0) {
-      console.log(`📊 Tìm thấy ${highRates.length} cặp có funding rate cao:`);
+    if (allRates.length === 0) {
+      console.log('❌ Không lấy được dữ liệu funding rate');
+      return;
+    }
 
-      // Lọc ra các symbol chưa được thông báo
-      const newAlerts = highRates.filter(item => !notifiedSymbols.has(item.symbol));
+    const alerts = [];
 
-      if (newAlerts.length > 0) {
-        // Hiển thị danh sách mới
-        newAlerts.forEach(item => {
-          const sign = item.fundingRate > 0 ? '+' : '';
-          console.log(`   - ${item.symbol}: ${sign}${item.fundingRate.toFixed(4)}%`);
-        });
+    // Kiểm tra từng symbol
+    for (const current of allRates) {
+      const symbol = current.symbol;
+      const currentRate = current.fundingRate;
+      const previous = previousRates.get(symbol);
 
-        // Gửi thông báo
-        await notifier.sendFundingRateAlert(newAlerts);
+      // 1. Kiểm tra funding rate cao (> ngưỡng tuyệt đối)
+      const isHighRate = Math.abs(currentRate) >= FUNDING_RATE_THRESHOLD;
 
-        // Thêm vào danh sách đã thông báo
-        newAlerts.forEach(item => notifiedSymbols.add(item.symbol));
-      } else {
-        console.log('   (Tất cả đều đã được thông báo trước đó)');
+      // 2. Kiểm tra thay đổi (nếu có dữ liệu lần trước)
+      let hasSignificantChange = false;
+      let rateChange = 0;
+
+      if (previous !== undefined) {
+        rateChange = currentRate - previous;
+        hasSignificantChange = Math.abs(rateChange) >= CHANGE_THRESHOLD;
       }
 
-      // Xóa các symbol không còn vượt ngưỡng khỏi set
-      const currentHighSymbols = new Set(highRates.map(item => item.symbol));
-      for (const symbol of notifiedSymbols) {
-        if (!currentHighSymbols.has(symbol)) {
-          notifiedSymbols.delete(symbol);
-          console.log(`   ℹ️  ${symbol} đã về mức funding rate bình thường`);
+      // Thêm vào danh sách cảnh báo nếu thỏa điều kiện
+      if (isHighRate || hasSignificantChange) {
+        const alreadyNotified = notifiedSymbols.has(symbol);
+
+        // Chỉ báo nếu chưa thông báo hoặc có thay đổi đáng kể
+        if (!alreadyNotified || hasSignificantChange) {
+          alerts.push({
+            ...current,
+            rateChange,
+            hasChange: hasSignificantChange,
+            reason: isHighRate ? 'high' : 'change'
+          });
+
+          notifiedSymbols.add(symbol);
         }
       }
-    } else {
-      console.log('✅ Không có cặp nào có funding rate > ±' + FUNDING_RATE_THRESHOLD + '%');
 
-      // Xóa tất cả nếu không còn symbol nào vượt ngưỡng
-      if (notifiedSymbols.size > 0) {
-        notifiedSymbols.clear();
+      // Cập nhật rate hiện tại
+      previousRates.set(symbol, currentRate);
+    }
+
+    // Gửi thông báo nếu có
+    if (alerts.length > 0) {
+      console.log(`📊 Tìm thấy ${alerts.length} cặp cần thông báo:`);
+      alerts.forEach(item => {
+        const sign = item.fundingRate > 0 ? '+' : '';
+        const changeSign = item.rateChange > 0 ? '+' : '';
+        const changeInfo = item.hasChange ? ` (thay đổi ${changeSign}${item.rateChange.toFixed(4)}%)` : '';
+        console.log(`   - ${item.symbol}: ${sign}${item.fundingRate.toFixed(4)}%${changeInfo}`);
+      });
+
+      await notifier.sendFundingRateAlert(alerts, FUNDING_RATE_THRESHOLD, CHANGE_THRESHOLD);
+    } else {
+      console.log(`✅ Không có cặp nào cần thông báo`);
+    }
+
+    // Reset trạng thái cho các symbol không còn vượt ngưỡng và không thay đổi
+    for (const symbol of notifiedSymbols) {
+      const current = allRates.find(r => r.symbol === symbol);
+      if (current) {
+        const isStillHigh = Math.abs(current.fundingRate) >= FUNDING_RATE_THRESHOLD;
+        if (!isStillHigh) {
+          notifiedSymbols.delete(symbol);
+          console.log(`🔄 ${symbol} đã trở về bình thường`);
+        }
       }
     }
   } catch (error) {
@@ -80,6 +118,7 @@ async function start() {
   console.log('🤖 BINANCE FUNDING RATE ALERT BOT');
   console.log('=================================================');
   console.log(`📊 Ngưỡng cảnh báo: ±${FUNDING_RATE_THRESHOLD}%`);
+  console.log(`📈 Ngưỡng thay đổi: ±${CHANGE_THRESHOLD}%`);
   console.log(`⏱️  Tần suất kiểm tra: ${CHECK_INTERVAL / 1000} giây`);
   console.log('=================================================\n');
 
@@ -111,7 +150,8 @@ function setupCommands() {
     await notifier.sendMessage('🔍 Đang kiểm tra tất cả các cặp...');
 
     try {
-      const highRates = await getHighFundingRates(FUNDING_RATE_THRESHOLD);
+      const allRates = await getAllFundingRates();
+      const highRates = allRates.filter(item => Math.abs(item.fundingRate) >= FUNDING_RATE_THRESHOLD);
       await notifier.sendCheckResult(highRates, FUNDING_RATE_THRESHOLD);
       console.log(`✅ Đã gửi kết quả check: ${highRates.length} cặp`);
     } catch (error) {
