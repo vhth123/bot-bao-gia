@@ -1,14 +1,66 @@
 const axios = require('axios');
 
-const BINANCE_API_BASE = 'https://fapi.binance.com';
+// Danh sách các API endpoints thay thế (fallback)
+const BINANCE_API_ENDPOINTS = [
+  'https://fapi.binance.com',
+  'https://fapi1.binance.com',
+  'https://fapi2.binance.com',
+  'https://fapi3.binance.com'
+];
+
+let currentEndpointIndex = 0;
+
+/**
+ * Lấy API endpoint hiện tại
+ */
+function getApiEndpoint() {
+  return BINANCE_API_ENDPOINTS[currentEndpointIndex];
+}
+
+/**
+ * Thử endpoint tiếp theo nếu hiện tại bị lỗi
+ */
+function switchToNextEndpoint() {
+  currentEndpointIndex = (currentEndpointIndex + 1) % BINANCE_API_ENDPOINTS.length;
+  console.log(`🔄 Chuyển sang endpoint: ${getApiEndpoint()}`);
+}
+
+/**
+ * Gọi API với retry và fallback endpoints
+ */
+async function callBinanceAPI(path, maxRetries = 3) {
+  let lastError;
+
+  for (let retry = 0; retry < maxRetries; retry++) {
+    for (let i = 0; i < BINANCE_API_ENDPOINTS.length; i++) {
+      try {
+        const endpoint = getApiEndpoint();
+        const response = await axios.get(`${endpoint}${path}`, {
+          timeout: 10000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        });
+        return response.data;
+      } catch (error) {
+        lastError = error;
+        console.error(`❌ Lỗi với ${getApiEndpoint()}: ${error.message}`);
+        switchToNextEndpoint();
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Đợi 1 giây
+      }
+    }
+  }
+
+  throw lastError;
+}
 
 /**
  * Lấy danh sách tất cả các trading pairs trên Binance Futures
  */
 async function getAllFuturesPairs() {
   try {
-    const response = await axios.get(`${BINANCE_API_BASE}/fapi/v1/exchangeInfo`);
-    const symbols = response.data.symbols
+    const data = await callBinanceAPI('/fapi/v1/exchangeInfo');
+    const symbols = data.symbols
       .filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL')
       .map(s => s.symbol);
     return symbols;
@@ -24,8 +76,8 @@ async function getAllFuturesPairs() {
  */
 async function getAllFundingRates() {
   try {
-    const response = await axios.get(`${BINANCE_API_BASE}/fapi/v1/premiumIndex`);
-    return response.data.map(item => ({
+    const data = await callBinanceAPI('/fapi/v1/premiumIndex');
+    return data.map(item => ({
       symbol: item.symbol,
       fundingRate: parseFloat(item.lastFundingRate) * 100, // Convert to percentage
       nextFundingTime: new Date(parseInt(item.nextFundingTime)),
