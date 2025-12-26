@@ -1,4 +1,19 @@
 const axios = require('axios');
+const HttpsProxyAgent = require('https-proxy-agent');
+
+// Proxy configuration
+const PROXY_CONFIG = {
+  host: '143.14.173.142',
+  port: 22436,
+  auth: {
+    username: 'muaproxy693f6f8818e56',
+    password: 'vlbnbbtx8wvdno6u'
+  }
+};
+
+// Tạo proxy agent
+const proxyUrl = `http://${PROXY_CONFIG.auth.username}:${PROXY_CONFIG.auth.password}@${PROXY_CONFIG.host}:${PROXY_CONFIG.port}`;
+const proxyAgent = new HttpsProxyAgent(proxyUrl);
 
 // Danh sách các API endpoints thay thế (fallback)
 const BINANCE_API_ENDPOINTS = [
@@ -26,7 +41,7 @@ function switchToNextEndpoint() {
 }
 
 /**
- * Gọi API với retry và fallback endpoints
+ * Gọi API với retry và fallback endpoints qua proxy
  */
 async function callBinanceAPI(path, maxRetries = 3) {
   let lastError;
@@ -36,7 +51,8 @@ async function callBinanceAPI(path, maxRetries = 3) {
       try {
         const endpoint = getApiEndpoint();
         const response = await axios.get(`${endpoint}${path}`, {
-          timeout: 10000,
+          timeout: 15000,
+          httpsAgent: proxyAgent,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
           }
