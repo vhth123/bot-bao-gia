@@ -48,19 +48,43 @@ async function callBinanceAPI(path, maxRetries = 3) {
     for (let i = 0; i < BINANCE_API_ENDPOINTS.length; i++) {
       try {
         const endpoint = getApiEndpoint();
+        console.log(`🔄 Đang gọi: ${endpoint}${path}`);
+
         const response = await axios.get(`${endpoint}${path}`, {
           timeout: 20000,
           httpsAgent: proxyAgent,
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json'
           }
         });
 
-        console.log(`✅ Success ${endpoint}${path} - Status: ${response.status}`);
+        // Chi tiết debug response
+        console.log(`✅ Status: ${response.status} ${response.statusText}`);
+        console.log(`📋 Headers:`, JSON.stringify(response.headers, null, 2));
+        console.log(`📊 Data type: ${typeof response.data}`);
+        console.log(`📊 Data is array: ${Array.isArray(response.data)}`);
+        console.log(`📊 Data length: ${response.data?.length || 'N/A'}`);
+
+        if (typeof response.data === 'string') {
+          console.log(`📄 Raw string data (first 500 chars):`, response.data.substring(0, 500));
+        } else if (Array.isArray(response.data)) {
+          console.log(`✅ Array received with ${response.data.length} items`);
+          if (response.data.length > 0) {
+            console.log(`📝 First item:`, JSON.stringify(response.data[0], null, 2));
+          }
+        } else {
+          console.log(`⚠️ Unexpected data format:`, JSON.stringify(response.data).substring(0, 500));
+        }
+
         return response.data;
       } catch (error) {
         lastError = error;
         console.error(`❌ Lỗi với ${getApiEndpoint()}: ${error.message}`);
+        if (error.response) {
+          console.error(`❌ Response status: ${error.response.status}`);
+          console.error(`❌ Response data:`, JSON.stringify(error.response.data).substring(0, 200));
+        }
         switchToNextEndpoint();
         await new Promise(resolve => setTimeout(resolve, 1000)); // Đợi 1 giây
       }

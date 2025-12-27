@@ -4,7 +4,10 @@
       "Bash(git --version)",
       "Bash(xcode-select:*)",
       "Bash(git add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(node -e:*)",
+      "Bash(npm install)",
+      "Bash(git commit:*)"
     ]
   }
 }
